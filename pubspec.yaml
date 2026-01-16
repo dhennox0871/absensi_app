@@ -1,0 +1,66 @@
+name: absensi_app
+description: "Aplikasi Absensi Karyawan dengan Wajah dan Lokasi"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Ikon Bawaan
+  cupertino_icons: ^1.0.6
+
+  # --- PLUGIN UTAMA ---
+  http: ^1.2.0                    # Untuk koneksi ke Server/Laravel
+  shared_preferences: ^2.2.2      # Simpan data login di HP
+  
+  # --- PLUGIN KAMERA & SCAN ---
+  mobile_scanner: ^5.2.3          # Scan QR Code
+  camera: ^0.10.5                 # Buka Kamera (Face Detection)
+  google_mlkit_face_detection: ^0.10.0 # Deteksi Wajah Google
+  path_provider: ^2.1.2           # Simpan file sementara
+  path: ^1.9.0
+  
+  # TAMBAHKAN INI:
+  geolocator: ^11.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # Alat cek kerapian kode
+  flutter_lints: ^3.0.0
+
+  # --- ALAT GENERATE ICON & SPLASH ---
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+
+# --- KONFIGURASI ICON APLIKASI ---
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false # Matikan iOS biar ga error
+  image_path: "assets/images/logo_icon.png" # Pastikan file ini ada!
+  min_sdk_android: 21
+
+# --- KONFIGURASI LAYAR PEMBUKA (SPLASH) ---
+flutter_native_splash:
+  color: "#ffffff"
+  image: "assets/images/logo_icon.png"
+  android_12:
+    color: "#ffffff"
+    image: "assets/images/logo_icon.png"
+  fullscreen: true
+
+# --- PENGATURAN FLUTTER & ASET GAMBAR ---
+flutter:
+  uses-material-design: true
+
+  # INI BAGIAN YANG TADI HILANG:
+  assets:
+    - assets/images/login_illustration.png
+    - assets/images/logo_icon.png
+    - assets/images/logo_putih.png
+    - assets/images/logo.jpg
