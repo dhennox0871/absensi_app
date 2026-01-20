@@ -1,6 +1,7 @@
+import 'package:absensi_app/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'login_page.dart'; // <--- Panggil file Login yang sudah Anda amankan tadi
+//import 'config.dart';
 
 // 1. Variabel Global Kamera (Agar bisa diakses FaceScanPage)
 List<CameraDescription> cameras = [];
@@ -15,6 +16,10 @@ Future<void> main() async {
   } on CameraException catch (e) {
     debugPrint('Error: $e');
   }
+
+  // --- WAJIB: LOAD CONFIG IP DARI MEMORI ---
+  //await AppConfig.loadBaseUrl();
+  // ----------------------------------------
 
   runApp(const MyApp());
 }
@@ -32,7 +37,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       // 4. Arahkan ke Login Page
-      home: const LoginPage(),
+      home: const SplashScreen(),
     );
   }
 }

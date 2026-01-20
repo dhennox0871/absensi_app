@@ -1,10 +1,13 @@
 import 'dart:convert';
+//import 'package:absensi_app/setting_ip_page.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
-import 'home_view.dart'; // Pastikan ini mengarah ke file dashboard utama Anda
-// import 'admin_home_view.dart'; // Nanti jika Anda punya halaman khusus admin
+
+// IMPORT DUA DASHBOARD BERBEDA
+import 'dashboard_page.dart'; // Dashboard User Biasa
+import 'admin_dashboard_page.dart'; // Dashboard Admin
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,16 +17,13 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Controller Text Input
   final TextEditingController _nikController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // Variabel State
   bool _isLoading = false;
-  bool _isObscure = true; // Untuk sembunyikan password
-  bool _isAdminLogin = false; // <--- Opsi Login Administrator
+  bool _isObscure = true;
+  bool _isAdminLogin = false; // Checkbox Admin
 
-  // Fungsi Login
   Future<void> _login() async {
     if (_nikController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,9 +39,9 @@ class _LoginPageState extends State<LoginPage> {
       var response = await http.post(
         url,
         body: {
-          'email': _nikController.text, // Kirim NIK sebagai parameter 'email'
+          'email': _nikController.text,
           'password': _passwordController.text,
-          'is_admin': _isAdminLogin ? '1' : '0', // <--- Kirim status centang
+          'is_admin': _isAdminLogin ? '1' : '0', // Kirim status checkbox
         },
         headers: {'Accept': 'application/json'},
       );
@@ -53,31 +53,34 @@ class _LoginPageState extends State<LoginPage> {
         String token = json['access_token'];
         Map<String, dynamic> user = json['user'];
 
-        // Simpan ke HP
+        // Simpan sesi ke HP
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', token);
         await prefs.setString('user', jsonEncode(user));
 
         if (!mounted) return;
 
-        // Redirect ke Halaman Utama
-        // Jika nanti Anda punya halaman khusus Admin, bisa dipisah di sini:
-        // if (_isAdminLogin) { ke AdminPage } else { ke UserPage }
+        // --- LOGIKA PEMISAH HALAMAN (ROUTING) ---
+        Widget targetPage;
 
+        // Kita cek status CHECKBOX (_isAdminLogin), bukan cuma databasenya.
+        if (_isAdminLogin == true) {
+          // Jika user mencentang "Administrator", arahkan ke Admin Dashboard
+          // (Backend sudah memastikan hanya user staffcategoryid=1 yang bisa lolos ke sini)
+          targetPage = AdminDashboardPage(userData: user);
+        } else {
+          // Jika TIDAK mencentang, arahkan ke User Dashboard (Absen Biasa)
+          // Tidak peduli apakah dia Staff atau Admin, kalau login biasa ya masuk dashboard biasa
+          targetPage = DashboardPage(userData: user);
+        }
+
+        // Pindah Halaman & Hapus Riwayat Login (agar tidak bisa back)
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => Scaffold(
-              body: SafeArea(
-                // Mengirim data user ke HomeView agar nama tampil benar
-                child: HomeView(userData: user),
-              ),
-            ),
-          ),
+          MaterialPageRoute(builder: (context) => targetPage),
         );
       } else {
         // --- LOGIN GAGAL ---
-        // Tampilkan pesan error dari server (misal: "Anda bukan Administrator")
         String message = json['message'] ?? "Login Gagal";
         if (!mounted) return;
         _showErrorDialog(message);
@@ -110,25 +113,44 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // TAMBAHKAN APP BAR INI
+      /*appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.grey),
+            tooltip: "Setting IP Server",
+            onPressed: () {
+              // Buka Halaman Setting IP
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingIpPage()),
+              );
+            },
+          )
+        ],
+      ),*/
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 50.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 30),
-              // GAMBAR ILUSTRASI
+              const SizedBox(height: 10),
+              // ILUSTRASI / GAMBAR
               Center(
                 child: Image.asset(
-                  "assets/images/login_image.png", // Pastikan gambar ada
+                  "assets/images/login_illustration.png",
                   height: 200,
+                  // Error Builder (jika gambar tidak ketemu, muncul icon)
                   errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.lock_clock,
                       size: 100,
                       color: Colors.blue),
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 10),
 
               const Text(
                 "Login Absensi",
@@ -149,7 +171,6 @@ class _LoginPageState extends State<LoginPage> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: "Staff ID / NIK",
-                  hintText: "Contoh: 202204001",
                   prefixIcon: const Icon(Icons.badge_outlined),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -175,11 +196,10 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 10),
 
-              // --- BAGIAN BARU: CHECKBOX ADMIN & LUPA PASSWORD ---
+              // PILIHAN ADMIN & LUPA PASSWORD
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Opsi Kiri: Checkbox Administrator
                   Row(
                     children: [
                       Checkbox(
@@ -195,12 +215,8 @@ class _LoginPageState extends State<LoginPage> {
                           style: TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
-
-                  // Opsi Kanan: Lupa Password
                   GestureDetector(
-                    onTap: () {
-                      // Logika lupa password
-                    },
+                    onTap: () {},
                     child: Text(
                       "Lupa Password?",
                       style: TextStyle(
@@ -211,9 +227,8 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
               ),
-              // ---------------------------------------------------
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
 
               // TOMBOL LOGIN
               SizedBox(
@@ -238,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
 
               const SizedBox(height: 20),
 
-              // OPSI LAIN (GOOGLE)
+              // SEPARATOR GOOGLE
               Row(children: [
                 Expanded(child: Divider(color: Colors.grey[300])),
                 const Padding(
