@@ -420,7 +420,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ]),
         const SizedBox(height: 15),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text("Radius (KM)",
+          const Text("Radius (M)",
               style: TextStyle(fontWeight: FontWeight.bold)),
           SizedBox(
               width: 60,
@@ -439,8 +439,8 @@ class _SettingsPageState extends State<SettingsPage> {
         ]),
         Slider(
             value: _currentRadiusVal,
-            min: 0.1,
-            max: 5.0,
+            min: 5.0,
+            max: 10.0,
             divisions: 49,
             activeColor: _primaryColor,
             onChanged: (v) {

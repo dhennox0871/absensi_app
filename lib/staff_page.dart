@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'config.dart';
+import 'package:image_picker/image_picker.dart';
+import 'config.dart'; // Pastikan path ini benar
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
@@ -14,8 +15,9 @@ class StaffPage extends StatefulWidget {
 class _StaffPageState extends State<StaffPage> {
   bool _isLoading = true;
   List<dynamic> _staffList = [];
+  final ImagePicker _picker = ImagePicker();
 
-  // Warna Tema Admin
+  // Warna Tema
   final Color _primaryColor = const Color(0xFF6A11CB);
 
   @override
@@ -24,7 +26,7 @@ class _StaffPageState extends State<StaffPage> {
     _fetchStaff();
   }
 
-  // 1. Ambil Data Staff dari Server
+  // --- 1. AMBIL DATA STAFF ---
   Future<void> _fetchStaff() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -40,23 +42,25 @@ class _StaffPageState extends State<StaffPage> {
 
       if (response.statusCode == 200) {
         var json = jsonDecode(response.body);
-        setState(() {
-          _staffList = json['data'];
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _staffList = json['data'];
+            _isLoading = false;
+          });
+        }
       } else {
-        _showSnack("Gagal mengambil data staff");
+        if (mounted) _showSnack("Gagal mengambil data staff", isError: true);
       }
     } catch (e) {
-      _showSnack("Error koneksi: $e");
+      if (mounted) _showSnack("Error koneksi: $e", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 2. Fungsi Ganti Role (Switch Toggle)
-  Future<void> _updateRole(int userId, bool isAdmin, int index) async {
-    // Optimistic Update (Ubah tampilan dulu biar cepat)
+  // --- 2. UPDATE ROLE ADMIN ---
+  Future<void> _updateRole(int staffId, bool isAdmin, int index) async {
+    int oldRole = _staffList[index]['staffcategoryid'];
     setState(() {
       _staffList[index]['staffcategoryid'] = isAdmin ? 1 : 0;
     });
@@ -68,42 +72,151 @@ class _StaffPageState extends State<StaffPage> {
       var response = await http.post(
         Uri.parse(AppConfig.updateRole),
         body: {
-          'id': userId.toString(),
+          'id': staffId.toString(),
           'is_admin': isAdmin ? '1' : '0',
         },
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) _showSnack("Hak akses berhasil diubah!");
+      } else {
+        if (mounted) {
+          setState(() => _staffList[index]['staffcategoryid'] = oldRole);
+          _showSnack("Gagal update server.", isError: true);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _staffList[index]['staffcategoryid'] = oldRole);
+        _showSnack("Gagal koneksi server.", isError: true);
+      }
+    }
+  }
+
+  // --- 3. REGISTER WAJAH ---
+  Future<void> _registerFace(String staffId, String staffName) async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 50,
+        maxWidth: 800, // Kecilkan sedikit biar cepat
+      );
+
+      if (photo == null) return;
+      if (!mounted) return;
+
+      _showLoadingDialog("Mengupload Wajah...");
+
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token');
+
+      var uri = Uri.parse("${AppConfig.baseUrl}/api/admin/register-face");
+      var request = http.MultipartRequest('POST', uri);
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      request.fields['staff_id'] = staffId;
+      request.files.add(await http.MultipartFile.fromPath('image', photo.path));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup Loading
+
+      if (response.statusCode == 200) {
+        _showSnack("SUKSES! Wajah $staffName berhasil didaftarkan.");
+      } else {
+        var json = jsonDecode(response.body);
+        _showSnack(json['message'] ?? "Gagal upload.", isError: true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      _showSnack("Error Upload: $e", isError: true);
+    }
+  }
+
+  // --- 4. UPDATE DATABASE WAJAH (TOMBOL BARU) ---
+  Future<void> updateDatabaseWajah() async {
+    _showLoadingDialog("Melatih AI Wajah...\n(Mohon Tunggu)");
+
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token'); // AMBIL TOKEN ASLI DISINI
+
+      // Panggil API Python via Laravel
+      final response = await http.get(
+        // Sesuaikan endpoint ini dengan route api.php Anda
+        // Pastikan route '/admin/sync-faces' sudah ada
+        Uri.parse('${AppConfig.baseUrl}/api/admin/sync-faces'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
 
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup Loading
+
       if (response.statusCode == 200) {
-        _showSnack("Hak akses berhasil diubah!");
+        _showDialogInfo("Sukses",
+            "Database wajah seluruh karyawan telah diperbarui!\nSekarang login wajah akan lebih cepat.");
       } else {
-        // Kalau gagal, kembalikan tampilan switch ke posisi awal
-        setState(() {
-          _staffList[index]['staffcategoryid'] = isAdmin ? 0 : 1;
-        });
-        _showSnack("Gagal update server.");
+        var msg = jsonDecode(response.body)['message'] ?? 'Gagal update';
+        _showDialogInfo("Gagal", "Error: $msg");
       }
     } catch (e) {
-      // Kalau error, kembalikan tampilan
-      setState(() {
-        _staffList[index]['staffcategoryid'] = isAdmin ? 0 : 1;
-      });
-      _showSnack("Gagal koneksi server.");
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showDialogInfo("Error Koneksi", e.toString());
     }
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  // --- HELPER UI ---
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? Colors.red : Colors.green,
+    ));
+  }
+
+  void _showLoadingDialog(String msg) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(child: Text(msg)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDialogInfo(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text("OK"))
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      // APP BAR SEDERHANA
       appBar: AppBar(
         title: const Text("Kelola Pegawai",
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -111,7 +224,15 @@ class _StaffPageState extends State<StaffPage> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
+          // TOMBOL 1: SYNC WAJAH (BARU)
           IconButton(
+            tooltip: "Update Database Wajah",
+            icon: const Icon(Icons.system_update_alt, color: Colors.orange),
+            onPressed: updateDatabaseWajah, // Panggil fungsi baru
+          ),
+          // TOMBOL 2: REFRESH DATA
+          IconButton(
+            tooltip: "Refresh Data",
             icon: const Icon(Icons.refresh),
             onPressed: () {
               setState(() => _isLoading = true);
@@ -130,10 +251,12 @@ class _StaffPageState extends State<StaffPage> {
                 itemBuilder: (context, index) {
                   var staff = _staffList[index];
                   bool isAdmin = staff['staffcategoryid'].toString() == '1';
-                  String name = staff['name'] ?? "No Name";
+                  String name =
+                      staff['name'] ?? staff['staffname'] ?? "No Name";
                   String nik = staff['staffcode'] ?? "-";
                   String position =
-                      staff['position']?['positionname'] ?? "Staff";
+                      staff['position']?['description'] ?? "Staff";
+                  int staffId = staff['staffid'];
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 15),
@@ -152,14 +275,11 @@ class _StaffPageState extends State<StaffPage> {
                       padding: const EdgeInsets.all(15.0),
                       child: Row(
                         children: [
-                          // 1. AVATAR / FOTO
                           CircleAvatar(
                             radius: 25,
                             backgroundColor: isAdmin
-                                ? _primaryColor.withValues(
-                                    alpha: 0.1) // Ungu Pucat kalau Admin
-                                : Colors.blue.withValues(
-                                    alpha: 0.1), // Biru Pucat kalau User
+                                ? _primaryColor.withValues(alpha: 0.1)
+                                : Colors.blue.withValues(alpha: 0.1),
                             child: Text(
                               _getInitials(name),
                               style: TextStyle(
@@ -169,8 +289,6 @@ class _StaffPageState extends State<StaffPage> {
                             ),
                           ),
                           const SizedBox(width: 15),
-
-                          // 2. INFO PEGAWAI
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,46 +309,25 @@ class _StaffPageState extends State<StaffPage> {
                                     color: Colors.grey[600],
                                   ),
                                 ),
-                                if (isAdmin)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 5),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                        color: _primaryColor,
-                                        borderRadius: BorderRadius.circular(5)),
-                                    child: const Text(
-                                      "Administrator",
-                                      style: TextStyle(
-                                          color: Colors.white, fontSize: 10),
-                                    ),
-                                  )
                               ],
                             ),
                           ),
-
-                          // 3. SWITCH TOGGLE
-                          Column(
+                          Row(
                             children: [
+                              IconButton(
+                                tooltip: "Daftarkan Wajah",
+                                icon: const Icon(Icons.face_retouching_natural),
+                                color: Colors.green,
+                                onPressed: () {
+                                  _registerFace(staffId.toString(), name);
+                                },
+                              ),
                               Switch(
                                 value: isAdmin,
                                 activeThumbColor: _primaryColor,
-                                onChanged: (value) {
-                                  // SALAH: staff['id'] mungkin null jika json key-nya 'staffid'
-                                  // _updateRole(staff['id'], value, index);
-
-                                  // BENAR: Gunakan staff['staffid']
-                                  _updateRole(staff['staffid'], value, index);
-                                },
+                                onChanged: (val) =>
+                                    _updateRole(staffId, val, index),
                               ),
-                              Text(
-                                isAdmin ? "Admin" : "User",
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color:
-                                        isAdmin ? _primaryColor : Colors.grey,
-                                    fontWeight: FontWeight.bold),
-                              )
                             ],
                           )
                         ],
@@ -243,7 +340,6 @@ class _StaffPageState extends State<StaffPage> {
     );
   }
 
-  // Helper untuk ambil inisial nama (Misal: Dhenny Hariyanto -> DH)
   String _getInitials(String name) {
     List<String> nameParts = name.trim().split(" ");
     if (nameParts.isEmpty) return "";

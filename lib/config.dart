@@ -1,7 +1,7 @@
 class AppConfig {
   // ⚠️ GANTI BAGIAN INI SESUAI HASIL IPCONFIG LAPTOP ANDA
   // Pastikan formatnya: http://IP_ADDRESS:8000
-  static const String baseUrl = "http://192.168.1.10:8000";
+  static const String baseUrl = "https://logme.site";
 
   // Endpoint API (Otomatis mengikuti baseUrl di atas)
   static const String login = "$baseUrl/api/login";
