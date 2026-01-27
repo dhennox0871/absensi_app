@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:absensi_app/config.dart';
+import 'package:absensi_app/history_page.dart';
+import 'package:absensi_app/leave_page.dart';
+import 'package:absensi_app/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,9 +27,10 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _pages = [
       HomeView(userData: widget.userData), // Index 0: Home
-      const Center(child: Text("Halaman History")), // Index 1
-      const Center(child: Text("Halaman Ijin")), // Index 2
-      const Center(child: Text("Halaman Profile")), // Index 3
+      const HistoryPage(), // Index 1
+      const LeavePage(), // Index 2
+      ProfilePage(
+          userData: Map<String, dynamic>.from(widget.userData)), // Index 3
     ];
   }
 
