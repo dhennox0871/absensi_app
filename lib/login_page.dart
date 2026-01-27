@@ -1,14 +1,15 @@
 import 'dart:convert';
-//import 'dart:io'; // Tambahan untuk File
+//import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart'; // Tambahan untuk Kamera
+import 'package:image_picker/image_picker.dart';
 import 'config.dart';
 
-// IMPORT DUA DASHBOARD BERBEDA (Sesuai kode Bapak)
+// IMPORT DASHBOARD & KIOSK
 import 'dashboard_page.dart';
 import 'admin_dashboard_page.dart';
+import 'kiosk_page.dart'; // <--- Pastikan file ini ada
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,12 +24,11 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _isObscure = true;
-  bool _isAdminLogin = false; // Checkbox Admin tetap ada
+  bool _isAdminLogin = false;
 
-  // Init Image Picker untuk Wajah
   final ImagePicker _picker = ImagePicker();
 
-  // --- LOGIKA LOGIN MANUAL (TIDAK DIUBAH SAMA SEKALI) ---
+  // --- LOGIKA LOGIN MANUAL (TETAP SAMA) ---
   Future<void> _login() async {
     if (_nikController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-// --- LOGIKA LOGIN WAJAH (VERSI DEBUG DI HP) ---
+  // --- LOGIKA LOGIN WAJAH (TETAP SAMA) ---
   Future<void> _handleFaceLogin() async {
     try {
       final XFile? photo = await _picker.pickImage(
@@ -100,7 +100,6 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() => _isLoading = true);
 
-      // Pastikan URL Benar
       var uri = Uri.parse("${AppConfig.baseUrl}/api/login-face");
       var request = http.MultipartRequest('POST', uri);
       request.files.add(await http.MultipartFile.fromPath('image', photo.path));
@@ -108,9 +107,7 @@ class _LoginPageState extends State<LoginPage> {
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
-      // --- LOGIKA PENANGANAN ERROR SERVER ---
       if (response.statusCode == 200) {
-        // KEMUNGKINAN 1: SUKSES
         try {
           var json = jsonDecode(response.body);
 
@@ -132,24 +129,15 @@ class _LoginPageState extends State<LoginPage> {
                 builder: (context) => DashboardPage(userData: user)),
           );
         } catch (e) {
-          // Server bilang 200 OK, tapi datanya bukan JSON valid
           _showErrorDialog(
               "Format Data Salah: $e\n\nIsi: ${response.body.substring(0, 100)}...");
         }
       } else {
-        // KEMUNGKINAN 2: ERROR DARI SERVER (500, 404, 401)
         String body = response.body.trim();
-
         if (body.startsWith("<")) {
-          // INI DIA TERSANGKANYA! Server kirim HTML (Error Laravel)
-          // Kita tampilkan sebagian isinya biar Bapak tau errornya apa
-          // Biasanya ada tulisan "Whoops, something went wrong" atau detail error
-
-          // Ambil 500 karakter pertama saja biar tidak kepanjangan
           String preview = body.length > 500 ? body.substring(0, 500) : body;
           _showErrorDialog("SERVER ERROR (${response.statusCode}):\n$preview");
         } else {
-          // Error JSON biasa (misal: Wajah tidak dikenali)
           try {
             var json = jsonDecode(body);
             _showErrorDialog(
@@ -189,16 +177,35 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 50.0),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 25.0, vertical: 40.0), // Padding atas dikit biar pas
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 10),
-              // ILUSTRASI (Tetap sesuai aset Bapak)
+              // --- TAMBAHAN: IKON KIOSK DI POJOK KANAN ATAS ---
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: "Mode Kiosk Kantor",
+                  icon:
+                      const Icon(Icons.storefront_outlined, color: Colors.grey),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const KioskPage()),
+                    );
+                  },
+                ),
+              ),
+              // ------------------------------------------------
+
+              const SizedBox(height: 0),
+              // ILUSTRASI (Tetap)
               Center(
                 child: Image.asset(
                   "assets/images/login_illustration.png",
-                  height: 200,
+                  height: 180, // Sedikit disesuaikan biar muat
                   errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.lock_clock,
                       size: 100,
@@ -220,7 +227,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 30),
 
-              // INPUT NIK
+              // INPUT NIK (Tetap)
               TextField(
                 controller: _nikController,
                 keyboardType: TextInputType.number,
@@ -233,7 +240,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
 
-              // INPUT PASSWORD
+              // INPUT PASSWORD (Tetap)
               TextField(
                 controller: _passwordController,
                 obscureText: _isObscure,
@@ -251,7 +258,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 10),
 
-              // PILIHAN ADMIN & LUPA PASSWORD
+              // PILIHAN ADMIN (Tetap)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -285,7 +292,7 @@ class _LoginPageState extends State<LoginPage> {
 
               const SizedBox(height: 20),
 
-              // TOMBOL LOGIN (Function _login tetap dipakai)
+              // TOMBOL LOGIN (Tetap)
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -308,7 +315,7 @@ class _LoginPageState extends State<LoginPage> {
 
               const SizedBox(height: 20),
 
-              // SEPARATOR
+              // SEPARATOR (Tetap)
               Row(children: [
                 Expanded(child: Divider(color: Colors.grey[300])),
                 const Padding(
@@ -319,14 +326,12 @@ class _LoginPageState extends State<LoginPage> {
               ]),
               const SizedBox(height: 20),
 
-              // TOMBOL SCAN WAJAH (Ganti Google)
+              // TOMBOL SCAN WAJAH (Tetap)
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton.icon(
-                  onPressed: _isLoading
-                      ? null
-                      : _handleFaceLogin, // Panggil Fungsi Wajah
+                  onPressed: _isLoading ? null : _handleFaceLogin,
                   icon: const Icon(Icons.face_retouching_natural,
                       size: 28, color: Colors.blue),
                   label: const Text("Scan Wajah",
