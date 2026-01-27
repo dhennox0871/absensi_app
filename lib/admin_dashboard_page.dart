@@ -1,3 +1,4 @@
+import 'package:absensi_app/approval_page.dart';
 import 'package:absensi_app/settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -216,7 +217,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   //Widget _buildStaffPage() => const Center(child: Text("Halaman Staff"));
-  Widget _buildApprovalPage() => const Center(child: Text("Halaman Approval"));
+  Widget _buildApprovalPage() {
+    return const ApprovalPage();
+  }
+
   //Widget _buildSettingsPage() => const Center(child: Text("Halaman Setting"));
 // --- HALAMAN 2: STAFF (Panggil File Baru) ---
   Widget _buildSettingsPage() {
