@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
-import 'config.dart'; // Pastikan path ini benar
+import '../config.dart';
+import 'area_page.dart'; // <--- Import Halaman Area
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
@@ -17,8 +18,9 @@ class _StaffPageState extends State<StaffPage> {
   List<dynamic> _staffList = [];
   final ImagePicker _picker = ImagePicker();
 
-  // Warna Tema
+  // Warna Tema Admin
   final Color _primaryColor = const Color(0xFF6A11CB);
+  //final Color _secondaryColor = const Color(0xFF2575FC);
 
   @override
   void initState() {
@@ -26,7 +28,7 @@ class _StaffPageState extends State<StaffPage> {
     _fetchStaff();
   }
 
-  // --- 1. AMBIL DATA STAFF ---
+  // --- 1. AMBIL DATA STAFF (TETAP) ---
   Future<void> _fetchStaff() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -58,7 +60,7 @@ class _StaffPageState extends State<StaffPage> {
     }
   }
 
-  // --- 2. UPDATE ROLE ADMIN ---
+  // --- 2. UPDATE ROLE ADMIN (TETAP) ---
   Future<void> _updateRole(int staffId, bool isAdmin, int index) async {
     int oldRole = _staffList[index]['staffcategoryid'];
     setState(() {
@@ -94,14 +96,14 @@ class _StaffPageState extends State<StaffPage> {
     }
   }
 
-  // --- 3. REGISTER WAJAH ---
+  // --- 3. REGISTER WAJAH (TETAP) ---
   Future<void> _registerFace(String staffId, String staffName) async {
     try {
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
         imageQuality: 50,
-        maxWidth: 800, // Kecilkan sedikit biar cepat
+        maxWidth: 800,
       );
 
       if (photo == null) return;
@@ -124,7 +126,7 @@ class _StaffPageState extends State<StaffPage> {
       var response = await http.Response.fromStream(streamedResponse);
 
       if (!mounted) return;
-      Navigator.pop(context); // Tutup Loading
+      Navigator.pop(context);
 
       if (response.statusCode == 200) {
         _showSnack("SUKSES! Wajah $staffName berhasil didaftarkan.");
@@ -139,18 +141,15 @@ class _StaffPageState extends State<StaffPage> {
     }
   }
 
-  // --- 4. UPDATE DATABASE WAJAH (TOMBOL BARU) ---
+  // --- 4. UPDATE DATABASE WAJAH (TETAP) ---
   Future<void> updateDatabaseWajah() async {
     _showLoadingDialog("Melatih AI Wajah...\n(Mohon Tunggu)");
 
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('token'); // AMBIL TOKEN ASLI DISINI
+      String? token = prefs.getString('token');
 
-      // Panggil API Python via Laravel
       final response = await http.get(
-        // Sesuaikan endpoint ini dengan route api.php Anda
-        // Pastikan route '/admin/sync-faces' sudah ada
         Uri.parse('${AppConfig.baseUrl}/api/admin/sync-faces'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -159,7 +158,7 @@ class _StaffPageState extends State<StaffPage> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // Tutup Loading
+      Navigator.pop(context);
 
       if (response.statusCode == 200) {
         _showDialogInfo("Sukses",
@@ -219,21 +218,28 @@ class _StaffPageState extends State<StaffPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text("Kelola Pegawai",
-            style: TextStyle(fontWeight: FontWeight.bold)),
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
         elevation: 0,
         actions: [
-          // TOMBOL 1: SYNC WAJAH (BARU)
+          // TOMBOL MASTER AREA (BARU)
           IconButton(
-            tooltip: "Update Database Wajah",
-            icon: const Icon(Icons.system_update_alt, color: Colors.orange),
-            onPressed: updateDatabaseWajah, // Panggil fungsi baru
+            tooltip: "Kelola Area Penempatan",
+            icon: Icon(Icons.map_outlined, color: _primaryColor),
+            onPressed: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (context) => const AreaPage()));
+            },
           ),
-          // TOMBOL 2: REFRESH DATA
+          // TOMBOL UPDATE WAJAH
           IconButton(
-            tooltip: "Refresh Data",
-            icon: const Icon(Icons.refresh),
+            tooltip: "Update DB Wajah",
+            icon: const Icon(Icons.sync, color: Colors.orange),
+            onPressed: updateDatabaseWajah,
+          ),
+          // TOMBOL REFRESH
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.grey),
             onPressed: () {
               setState(() => _isLoading = true);
               _fetchStaff();
@@ -259,77 +265,80 @@ class _StaffPageState extends State<StaffPage> {
                   int staffId = staff['staffid'];
 
                   return Container(
-                    margin: const EdgeInsets.only(bottom: 15),
+                    margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
+                          color: Colors.grey.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Row(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      leading: CircleAvatar(
+                        radius: 25,
+                        backgroundColor: isAdmin
+                            ? _primaryColor.withValues(alpha: 0.1)
+                            : Colors.blue.withValues(alpha: 0.1),
+                        child: Text(
+                          _getInitials(name),
+                          style: TextStyle(
+                            color: isAdmin ? _primaryColor : Colors.blue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 25,
-                            backgroundColor: isAdmin
-                                ? _primaryColor.withValues(alpha: 0.1)
-                                : Colors.blue.withValues(alpha: 0.1),
-                            child: Text(
-                              _getInitials(name),
+                          Text("$position • $nik",
                               style: TextStyle(
-                                color: isAdmin ? _primaryColor : Colors.blue,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "$position • $nik",
+                                  fontSize: 12, color: Colors.grey[600])),
+                          // Tampilkan status admin kecil di bawah
+                          if (isAdmin)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: _primaryColor,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: const Text("ADMIN",
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold)),
+                            )
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Tombol Register Wajah
+                          IconButton(
+                            icon: const Icon(Icons.face_retouching_natural,
+                                color: Colors.green),
+                            tooltip: "Daftar Wajah",
+                            onPressed: () =>
+                                _registerFace(staffId.toString(), name),
                           ),
-                          Row(
-                            children: [
-                              IconButton(
-                                tooltip: "Daftarkan Wajah",
-                                icon: const Icon(Icons.face_retouching_natural),
-                                color: Colors.green,
-                                onPressed: () {
-                                  _registerFace(staffId.toString(), name);
-                                },
-                              ),
-                              Switch(
-                                value: isAdmin,
-                                activeThumbColor: _primaryColor,
-                                onChanged: (val) =>
-                                    _updateRole(staffId, val, index),
-                              ),
-                            ],
-                          )
+                          // Switch Admin
+                          Switch(
+                            value: isAdmin,
+                            activeThumbColor: _primaryColor,
+                            onChanged: (val) =>
+                                _updateRole(staffId, val, index),
+                          ),
                         ],
                       ),
                     ),

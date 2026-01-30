@@ -6,19 +6,20 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+// TAMBAHAN IMPORT UNTUK MAP
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'config.dart';
 
 class HomeView extends StatefulWidget {
   final Map userData;
 
-  // Tambahkan Key agar bisa diakses dari MainPage
   const HomeView({super.key, required this.userData});
 
   @override
   State<HomeView> createState() => HomeViewState();
 }
 
-// Ubah jadi Public (Hapus underscore _) agar bisa dipanggil GlobalKey
 class HomeViewState extends State<HomeView> {
   List _rawHistoryData = [];
   Map<String, List<dynamic>> _groupedHistory = {};
@@ -33,6 +34,9 @@ class HomeViewState extends State<HomeView> {
 
   // --- 1. FETCH DATA & GROUPING ---
   Future<void> _fetchHistory() async {
+    // Tambahkan setState loading agar user tau sedang refresh
+    if (mounted) setState(() => _isLoading = true);
+
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
@@ -74,9 +78,8 @@ class HomeViewState extends State<HomeView> {
     }
   }
 
-  // --- 2. LOGIKA ABSENSI (LOGIKA TETAP SAMA) ---
+  // --- 2. LOGIKA ABSENSI (TIDAK DIUBAH) ---
   Future<void> handleAttendance() async {
-    // A. Cek GPS
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (!mounted) return;
@@ -96,7 +99,6 @@ class HomeViewState extends State<HomeView> {
       return;
     }
 
-    // B. Ambil Lokasi
     if (!mounted) return;
     _showLoadingDialog("Mencari Lokasi...");
 
@@ -106,15 +108,14 @@ class HomeViewState extends State<HomeView> {
           desiredAccuracy: LocationAccuracy.high);
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Tutup loading
+      Navigator.pop(context);
       _showSnack("Gagal ambil lokasi.", Colors.red);
       return;
     }
 
     if (!mounted) return;
-    Navigator.pop(context); // Tutup loading lokasi
+    Navigator.pop(context);
 
-    // C. Buka Kamera
     try {
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
@@ -124,7 +125,6 @@ class HomeViewState extends State<HomeView> {
 
       if (photo == null) return;
 
-      // D. Kirim ke Server
       if (!mounted) return;
       _submitAttendance(File(photo.path), position);
     } catch (e) {
@@ -151,12 +151,14 @@ class HomeViewState extends State<HomeView> {
       var response = await http.Response.fromStream(streamedResponse);
 
       if (!mounted) return;
-      Navigator.pop(context); // Tutup Loading
+      Navigator.pop(context);
 
       if (response.statusCode == 200) {
         var respData = jsonDecode(response.body);
         _showSuccessDialog("Absen Berhasil",
             "Shift Terdeteksi: ${respData['shift_detect'] ?? '-'}");
+
+        // FITUR 1: Update list history setelah sukses
         _fetchHistory();
       } else {
         var err = jsonDecode(response.body);
@@ -183,9 +185,21 @@ class HomeViewState extends State<HomeView> {
             children: [
               const Text("Aktivitas Minggu Ini",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text("Lihat Semua",
-                  style: TextStyle(
-                      color: Colors.blue[700], fontWeight: FontWeight.w600)),
+
+              // FITUR 2: Tombol Refresh & Lihat Semua
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _fetchHistory,
+                    icon: const Icon(Icons.refresh, color: Colors.blue),
+                    tooltip: "Refresh History",
+                  ),
+                  /*Text("Lihat Semua",
+                      style: TextStyle(
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w600)),*/
+                ],
+              ),
             ],
           ),
         ),
@@ -279,7 +293,6 @@ class HomeViewState extends State<HomeView> {
     int shift = int.tryParse(scan['shift'].toString()) ?? 1;
     String photoName = scan['freedescription1'] ?? '';
 
-    // Ambil Lat Long dari Data
     String lat = scan['freedescription3']?.toString() ?? '-';
     String lng = scan['freedescription2']?.toString() ?? '-';
 
@@ -299,7 +312,6 @@ class HomeViewState extends State<HomeView> {
 
     String imageUrl = "${AppConfig.baseUrl}/storage/attendance/$photoName";
 
-    // Format Waktu & Tanggal untuk Popup
     String timeStr = "${_formatTime(h, m)} WIB";
     String dateStr = _formatDate(scan['entrydate'].toString());
 
@@ -336,22 +348,39 @@ class HomeViewState extends State<HomeView> {
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, size: 12, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    const Text("Lokasi Terdata",
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
+
+                // FITUR 3: Tombol Lokasi Terdata (Clickable)
+                InkWell(
+                  onTap: () {
+                    double? dLat = double.tryParse(lat);
+                    double? dLng = double.tryParse(lng);
+                    if (dLat != null && dLng != null) {
+                      _showMapPopup(dLat, dLng, label);
+                    } else {
+                      _showSnack("Lokasi tidak valid", Colors.red);
+                    }
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min, // Agar tidak memenuhi baris
+                    children: [
+                      Icon(Icons.location_on,
+                          size: 14,
+                          color: Colors.blue[
+                              400]), // Ubah warna jadi biru biar terlihat clickable
+                      const SizedBox(width: 4),
+                      Text("Lokasi Terdata (Klik)",
+                          style: TextStyle(
+                              color: Colors.blue[400],
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-
-          // --- THUMBNAIL FOTO ---
           GestureDetector(
             onTap: () {
-              // Jika ada foto, tampilkan popup lengkap
               if (photoName.isNotEmpty) {
                 _showImagePopup(imageUrl, label, dateStr, timeStr, lat, lng);
               } else {
@@ -387,6 +416,90 @@ class HomeViewState extends State<HomeView> {
     );
   }
 
+  // --- FITUR 3: FUNGSI POPUP MAP RADIUS 100M ---
+  void _showMapPopup(double lat, double lng, String title) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        child: Container(
+          height: 450,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Column(
+            children: [
+              // Header Map
+              Padding(
+                padding: const EdgeInsets.all(15),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Lokasi: $title",
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    InkWell(
+                        onTap: () => Navigator.pop(context),
+                        child: const Icon(Icons.close)),
+                  ],
+                ),
+              ),
+              // Map View
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(15),
+                      bottomRight: Radius.circular(15)),
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(lat, lng), // Titik Absen
+                      initialZoom: 16.0,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName:
+                            'com.absensi.dhenny', // Ganti dengan package name app anda
+                      ),
+                      // Layer Radius 100M
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: LatLng(lat, lng),
+                            color: Colors.blue.withValues(alpha: 0.3),
+                            borderColor: Colors.blue,
+                            borderStrokeWidth: 2,
+                            useRadiusInMeter: true,
+                            radius: 100, // Radius 100 Meter
+                          ),
+                        ],
+                      ),
+                      // Layer Marker
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(lat, lng),
+                            width: 80,
+                            height: 80,
+                            child: const Icon(Icons.location_on,
+                                color: Colors.red, size: 40),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- TOP SECTION & HELPER FUNCTIONS (TIDAK DIUBAH SIGNIFIKAN) ---
   Widget _buildTopSection(BuildContext context) {
     int hariHadir = _groupedHistory.keys.length;
     return Stack(
@@ -473,7 +586,6 @@ class HomeViewState extends State<HomeView> {
     );
   }
 
-  // --- POPUP FOTO & DETAIL ---
   void _showImagePopup(String imageUrl, String label, String date, String time,
       String lat, String lng) {
     showDialog(
@@ -489,13 +601,10 @@ class HomeViewState extends State<HomeView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Text("Detail Bukti $label",
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 15),
-
-              // Foto
               ClipRRect(
                 borderRadius: BorderRadius.circular(15),
                 child: Image.network(
@@ -517,12 +626,9 @@ class HomeViewState extends State<HomeView> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Info Detail
               _buildInfoRow(Icons.calendar_today, "Tanggal", date),
               _buildInfoRow(Icons.access_time, "Waktu", time),
               _buildInfoRow(Icons.location_on, "Lokasi", "$lat, $lng"),
-
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -543,7 +649,6 @@ class HomeViewState extends State<HomeView> {
     );
   }
 
-  // Helper Widget untuk Baris Info Popup
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
