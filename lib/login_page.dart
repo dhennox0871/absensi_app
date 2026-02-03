@@ -277,16 +277,6 @@ class _LoginPageState extends State<LoginPage> {
                           style: TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Text(
-                      "Lupa Password?",
-                      style: TextStyle(
-                        color: Colors.blue[700],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                 ],
               ),
 

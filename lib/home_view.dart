@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
-// TAMBAHAN IMPORT UNTUK MAP
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'config.dart';
@@ -26,15 +25,19 @@ class HomeViewState extends State<HomeView> {
   bool _isLoading = true;
   final ImagePicker _picker = ImagePicker();
 
+  // --- VARIABEL STATISTIK BARU ---
+  int _statHadir = 0;
+  int _statTerlambat = 0;
+  int _statAlpha = 0;
+
   @override
   void initState() {
     super.initState();
     _fetchHistory();
   }
 
-  // --- 1. FETCH DATA & GROUPING ---
+  // --- 1. FETCH DATA & HITUNG STATISTIK ---
   Future<void> _fetchHistory() async {
-    // Tambahkan setState loading agar user tau sedang refresh
     if (mounted) setState(() => _isLoading = true);
 
     try {
@@ -56,6 +59,10 @@ class HomeViewState extends State<HomeView> {
           setState(() {
             _rawHistoryData = json['data'];
             _groupDataByDate(_rawHistoryData);
+
+            // JALANKAN PERHITUNGAN KHUSUS
+            _calculateAttendanceStats();
+
             _isLoading = false;
           });
         }
@@ -78,7 +85,90 @@ class HomeViewState extends State<HomeView> {
     }
   }
 
-  // --- 2. LOGIKA ABSENSI (TIDAK DIUBAH) ---
+  // --- 2. LOGIKA PERHITUNGAN (INTI PERBAIKAN) ---
+  void _calculateAttendanceStats() {
+    int hadir = 0;
+    int terlambat = 0;
+    int alpha = 0;
+
+    // Batas Terlambat: 08:00 (Sesuai Screenshot HL: 480 menit)
+    const int lateLimitMinutes = 480;
+
+    DateTime now = DateTime.now();
+
+    // Loop 7 Hari Terakhir (Termasuk Hari Ini)
+    for (int i = 0; i < 7; i++) {
+      DateTime checkDate = now.subtract(Duration(days: i));
+
+      // Skip Hari Minggu (Weekday 7) - Tidak dihitung Alpha/Hadir
+      if (checkDate.weekday == 7) continue;
+
+      String dateKey =
+          "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+      bool isToday = (i == 0);
+
+      // Cek apakah ada data di tanggal tersebut?
+      if (_groupedHistory.containsKey(dateKey)) {
+        List scans = _groupedHistory[dateKey]!;
+
+        bool hasScanMasuk = false;
+        bool hasScanPulang = false;
+        int earliestInTime = 9999; // Untuk mencari jam masuk paling awal
+
+        for (var scan in scans) {
+          int shift = int.tryParse(scan['shift'].toString()) ?? 0;
+          int h = int.tryParse(scan['shour'].toString()) ?? 0;
+          int m = int.tryParse(scan['sminute'].toString()) ?? 0;
+          int totalMins = (h * 60) + m;
+
+          if (shift == 1) {
+            // Shift 1 = Masuk
+            hasScanMasuk = true;
+            if (totalMins < earliestInTime) earliestInTime = totalMins;
+          } else if (shift == 4) {
+            // Shift 4 = Pulang
+            hasScanPulang = true;
+          }
+        }
+
+        // LOGIKA HADIR (Minimal ada Scan Masuk)
+        if (hasScanMasuk) {
+          hadir++;
+
+          // LOGIKA TERLAMBAT (Jika Scan Masuk > 08:00)
+          if (earliestInTime > lateLimitMinutes) {
+            terlambat++;
+          }
+        }
+
+        // LOGIKA ALPHA (Data Ada tapi Tidak Lengkap)
+        // Rule: "Jika hanya scan masuk saja dianggap alpha"
+        // Pengecualian: Hari ini jangan dihitung Alpha dulu kalau belum pulang.
+        if (!isToday) {
+          if (hasScanMasuk && !hasScanPulang) {
+            alpha++; // Hukuman: Dianggap Alpha karena lupa checkout
+          } else if (!hasScanMasuk) {
+            alpha++; // Cuma ada data aneh (misal istirahat doang), tetap Alpha
+          }
+        }
+      } else {
+        // TIDAK ADA DATA SAMA SEKALI
+        // Jika hari berlalu (bukan hari ini) dan hari kerja, maka Alpha Murni
+        if (!isToday) {
+          alpha++;
+        }
+      }
+    }
+
+    // Update State UI
+    setState(() {
+      _statHadir = hadir;
+      _statTerlambat = terlambat;
+      _statAlpha = alpha;
+    });
+  }
+
+  // --- 3. LOGIKA ABSENSI (TIDAK DIUBAH) ---
   Future<void> handleAttendance() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -158,7 +248,7 @@ class HomeViewState extends State<HomeView> {
         _showSuccessDialog("Absen Berhasil",
             "Shift Terdeteksi: ${respData['shift_detect'] ?? '-'}");
 
-        // FITUR 1: Update list history setelah sukses
+        // Refresh Data agar statistik update otomatis
         _fetchHistory();
       } else {
         var err = jsonDecode(response.body);
@@ -185,8 +275,6 @@ class HomeViewState extends State<HomeView> {
             children: [
               const Text("Aktivitas Minggu Ini",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-              // FITUR 2: Tombol Refresh & Lihat Semua
               Row(
                 children: [
                   IconButton(
@@ -194,10 +282,6 @@ class HomeViewState extends State<HomeView> {
                     icon: const Icon(Icons.refresh, color: Colors.blue),
                     tooltip: "Refresh History",
                   ),
-                  /*Text("Lihat Semua",
-                      style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w600)),*/
                 ],
               ),
             ],
@@ -311,7 +395,6 @@ class HomeViewState extends State<HomeView> {
     }
 
     String imageUrl = "${AppConfig.baseUrl}/storage/attendance/$photoName";
-
     String timeStr = "${_formatTime(h, m)} WIB";
     String dateStr = _formatDate(scan['entrydate'].toString());
 
@@ -348,8 +431,6 @@ class HomeViewState extends State<HomeView> {
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
-
-                // FITUR 3: Tombol Lokasi Terdata (Clickable)
                 InkWell(
                   onTap: () {
                     double? dLat = double.tryParse(lat);
@@ -361,12 +442,10 @@ class HomeViewState extends State<HomeView> {
                     }
                   },
                   child: Row(
-                    mainAxisSize: MainAxisSize.min, // Agar tidak memenuhi baris
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.location_on,
-                          size: 14,
-                          color: Colors.blue[
-                              400]), // Ubah warna jadi biru biar terlihat clickable
+                          size: 14, color: Colors.blue[400]),
                       const SizedBox(width: 4),
                       Text("Lokasi Terdata (Klik)",
                           style: TextStyle(
@@ -416,7 +495,6 @@ class HomeViewState extends State<HomeView> {
     );
   }
 
-  // --- FITUR 3: FUNGSI POPUP MAP RADIUS 100M ---
   void _showMapPopup(double lat, double lng, String title) {
     showDialog(
       context: context,
@@ -430,7 +508,6 @@ class HomeViewState extends State<HomeView> {
           ),
           child: Column(
             children: [
-              // Header Map
               Padding(
                 padding: const EdgeInsets.all(15),
                 child: Row(
@@ -445,7 +522,6 @@ class HomeViewState extends State<HomeView> {
                   ],
                 ),
               ),
-              // Map View
               Expanded(
                 child: ClipRRect(
                   borderRadius: const BorderRadius.only(
@@ -453,17 +529,15 @@ class HomeViewState extends State<HomeView> {
                       bottomRight: Radius.circular(15)),
                   child: FlutterMap(
                     options: MapOptions(
-                      initialCenter: LatLng(lat, lng), // Titik Absen
+                      initialCenter: LatLng(lat, lng),
                       initialZoom: 16.0,
                     ),
                     children: [
                       TileLayer(
                         urlTemplate:
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName:
-                            'com.absensi.dhenny', // Ganti dengan package name app anda
+                        userAgentPackageName: 'com.absensi.dhenny',
                       ),
-                      // Layer Radius 100M
                       CircleLayer(
                         circles: [
                           CircleMarker(
@@ -472,11 +546,10 @@ class HomeViewState extends State<HomeView> {
                             borderColor: Colors.blue,
                             borderStrokeWidth: 2,
                             useRadiusInMeter: true,
-                            radius: 100, // Radius 100 Meter
+                            radius: 100,
                           ),
                         ],
                       ),
-                      // Layer Marker
                       MarkerLayer(
                         markers: [
                           Marker(
@@ -499,9 +572,7 @@ class HomeViewState extends State<HomeView> {
     );
   }
 
-  // --- TOP SECTION & HELPER FUNCTIONS (TIDAK DIUBAH SIGNIFIKAN) ---
   Widget _buildTopSection(BuildContext context) {
-    int hariHadir = _groupedHistory.keys.length;
     return Stack(
       children: [
         Container(
@@ -572,10 +643,11 @@ class HomeViewState extends State<HomeView> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStatItem("Hadir", "$hariHadir", Icons.check_circle),
-                    _buildStatItem(
-                        "Terlambat", "0", Icons.warning_amber_rounded),
-                    _buildStatItem("Alpha", "0", Icons.cancel),
+                    // MENGGUNAKAN VARIABEL STATISTIK YANG BARU DIHITUNG
+                    _buildStatItem("Hadir", "$_statHadir", Icons.check_circle),
+                    _buildStatItem("Terlambat", "$_statTerlambat",
+                        Icons.warning_amber_rounded),
+                    _buildStatItem("Alpha", "$_statAlpha", Icons.cancel),
                   ],
                 ),
               ),
