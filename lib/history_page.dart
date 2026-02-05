@@ -36,8 +36,17 @@ class _HistoryPageState extends State<HistoryPage> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
-      final response = await http.get(
+      /*final response = await http.get(
         Uri.parse("${AppConfig.baseUrl}/api/attendance/history"),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json'
+        },
+      );*/
+
+      // TAMBAHKAN ?type=all
+      final response = await http.get(
+        Uri.parse("${AppConfig.baseUrl}/api/attendance/history?type=all"),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json'

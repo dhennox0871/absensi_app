@@ -43,7 +43,10 @@ class HomeViewState extends State<HomeView> {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
-      var url = Uri.parse(AppConfig.history);
+      //var url = Uri.parse(AppConfig.history);
+      // TAMBAHKAN ?type=week
+      var url =
+          Uri.parse("${AppConfig.baseUrl}/api/attendance/history?type=week");
 
       var response = await http.get(
         url,
